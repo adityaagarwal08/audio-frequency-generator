@@ -3,13 +3,19 @@ class BinauralBeatGenerator {
         this.audioContext = null;
         this.leftOscillator = null;
         this.rightOscillator = null;
-        this.gainNode = null;
+        this.binauralGainNode = null;
+        this.musicGainNode = null;
+        this.musicSource = null;
+        this.musicBuffer = null;
         this.merger = null;
+        this.masterGain = null;
         this.isPlaying = false;
         this.isPaused = false;
         this.baseFrequency = 300; // Fixed 300Hz base frequency
         this.beatFrequency = 0;
-        this.volume = 0.5;
+        this.binauralVolume = 0.5;
+        this.musicVolume = 0.3;
+        this.hasMusicFile = false;
 
         this.initializeElements();
         this.setupEventListeners();
@@ -19,7 +25,10 @@ class BinauralBeatGenerator {
     initializeElements() {
         // Control elements
         this.beatFrequencySlider = document.getElementById('beatFrequency');
-        this.volumeSlider = document.getElementById('volume');
+        this.binauralVolumeSlider = document.getElementById('binauralVolume');
+        this.musicVolumeSlider = document.getElementById('musicVolume');
+        this.musicFileInput = document.getElementById('musicFile');
+        this.clearMusicBtn = document.getElementById('clearMusic');
         this.playBtn = document.getElementById('playBtn');
         this.pauseBtn = document.getElementById('pauseBtn');
         this.stopBtn = document.getElementById('stopBtn');
@@ -30,6 +39,8 @@ class BinauralBeatGenerator {
         this.beatTypeDisplay = document.getElementById('beatTypeDisplay');
         this.statusDisplay = document.getElementById('statusDisplay');
         this.browserWarning = document.getElementById('browserWarning');
+        this.musicStatus = document.getElementById('musicStatus');
+        this.musicVolumeControl = document.getElementById('musicVolumeControl');
     }
 
     checkBrowserSupport() {
@@ -49,7 +60,9 @@ class BinauralBeatGenerator {
         this.pauseBtn.disabled = true;
         this.stopBtn.disabled = true;
         this.beatFrequencySlider.disabled = true;
-        this.volumeSlider.disabled = true;
+        this.binauralVolumeSlider.disabled = true;
+        this.musicVolumeSlider.disabled = true;
+        this.musicFileInput.disabled = true;
     }
 
     setupEventListeners() {
@@ -62,13 +75,27 @@ class BinauralBeatGenerator {
             }
         });
 
-        // Volume slider
-        this.volumeSlider.addEventListener('input', (e) => {
-            this.volume = parseFloat(e.target.value);
-            if (this.gainNode) {
-                this.gainNode.gain.setValueAtTime(this.volume, this.audioContext.currentTime);
+        // Binaural volume slider
+        this.binauralVolumeSlider.addEventListener('input', (e) => {
+            this.binauralVolume = parseFloat(e.target.value);
+            if (this.binauralGainNode) {
+                this.binauralGainNode.gain.setValueAtTime(this.binauralVolume, this.audioContext.currentTime);
             }
         });
+
+        // Music volume slider
+        this.musicVolumeSlider.addEventListener('input', (e) => {
+            this.musicVolume = parseFloat(e.target.value);
+            if (this.musicGainNode) {
+                this.musicGainNode.gain.setValueAtTime(this.musicVolume, this.audioContext.currentTime);
+            }
+        });
+
+        // Music file input
+        this.musicFileInput.addEventListener('change', (e) => this.handleMusicFile(e));
+
+        // Clear music button
+        this.clearMusicBtn.addEventListener('click', () => this.clearMusic());
 
         // Playback controls
         this.playBtn.addEventListener('click', () => this.play());
@@ -94,20 +121,100 @@ class BinauralBeatGenerator {
         return 'Gamma - High Cognition';
     }
 
+    async handleMusicFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            this.updateStatus('Loading music file...', 'info');
+            
+            // Show music status and controls
+            this.musicStatus.textContent = `Loading: ${file.name}`;
+            this.musicStatus.classList.remove('d-none');
+            this.musicStatus.classList.add('bg-info');
+            this.clearMusicBtn.classList.remove('d-none');
+
+            // Read file as ArrayBuffer
+            const arrayBuffer = await this.readFileAsArrayBuffer(file);
+            
+            // Initialize audio context if needed
+            if (!this.audioContext) {
+                await this.initializeAudioContext();
+            }
+
+            // Decode audio data
+            this.musicBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            
+            this.hasMusicFile = true;
+            this.musicVolumeControl.style.display = 'block';
+            
+            this.musicStatus.textContent = `Loaded: ${file.name}`;
+            this.musicStatus.classList.remove('bg-info');
+            this.musicStatus.classList.add('bg-success');
+            this.updateStatus('Music file loaded successfully', 'success');
+
+        } catch (error) {
+            console.error('Error loading music file:', error);
+            this.updateStatus('Failed to load music file', 'danger');
+            this.musicStatus.textContent = 'Failed to load';
+            this.musicStatus.classList.remove('bg-info');
+            this.musicStatus.classList.add('bg-danger');
+            this.clearMusic();
+        }
+    }
+
+    readFileAsArrayBuffer(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    clearMusic() {
+        this.musicBuffer = null;
+        this.hasMusicFile = false;
+        this.musicFileInput.value = '';
+        this.musicStatus.classList.add('d-none');
+        this.clearMusicBtn.classList.add('d-none');
+        this.musicVolumeControl.style.display = 'none';
+        
+        // Stop music if playing
+        if (this.musicSource) {
+            try {
+                this.musicSource.stop();
+                this.musicSource.disconnect();
+            } catch (e) {
+                // Source might already be stopped
+            }
+            this.musicSource = null;
+        }
+        
+        this.updateStatus('Music cleared', 'secondary');
+    }
+
     async initializeAudioContext() {
         try {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             
-            // Create gain node for volume control
-            this.gainNode = this.audioContext.createGain();
-            this.gainNode.gain.setValueAtTime(this.volume, this.audioContext.currentTime);
+            // Create master gain node
+            this.masterGain = this.audioContext.createGain();
+            this.masterGain.connect(this.audioContext.destination);
 
-            // Create channel merger for stereo output
+            // Create gain node for binaural beats
+            this.binauralGainNode = this.audioContext.createGain();
+            this.binauralGainNode.gain.setValueAtTime(this.binauralVolume, this.audioContext.currentTime);
+            this.binauralGainNode.connect(this.masterGain);
+
+            // Create gain node for music
+            this.musicGainNode = this.audioContext.createGain();
+            this.musicGainNode.gain.setValueAtTime(this.musicVolume, this.audioContext.currentTime);
+            this.musicGainNode.connect(this.masterGain);
+
+            // Create channel merger for stereo binaural output
             this.merger = this.audioContext.createChannelMerger(2);
-            
-            // Connect gain to merger to destination
-            this.merger.connect(this.gainNode);
-            this.gainNode.connect(this.audioContext.destination);
+            this.merger.connect(this.binauralGainNode);
 
             return true;
         } catch (error) {
@@ -181,14 +288,42 @@ class BinauralBeatGenerator {
             this.leftOscillator.start();
             this.rightOscillator.start();
 
+            // Start music if available
+            if (this.hasMusicFile && this.musicBuffer) {
+                this.createMusicSource();
+                this.musicSource.start();
+            }
+
             this.isPlaying = true;
             this.isPaused = false;
-            this.updateStatus('Playing', 'success');
+            this.updateStatus(this.hasMusicFile ? 'Playing with music' : 'Playing', 'success');
             this.updateControlStates();
 
         } catch (error) {
             console.error('Playback failed:', error);
             this.updateStatus('Playback failed', 'danger');
+        }
+    }
+
+    createMusicSource() {
+        if (!this.musicBuffer || !this.audioContext) return;
+
+        try {
+            this.musicSource = this.audioContext.createBufferSource();
+            this.musicSource.buffer = this.musicBuffer;
+            this.musicSource.loop = true; // Loop the music
+            this.musicSource.connect(this.musicGainNode);
+
+            // Handle music ending (in case loop fails)
+            this.musicSource.onended = () => {
+                if (this.isPlaying && !this.isPaused) {
+                    // Restart music if still playing
+                    this.createMusicSource();
+                    this.musicSource.start();
+                }
+            };
+        } catch (error) {
+            console.error('Failed to create music source:', error);
         }
     }
 
@@ -203,6 +338,7 @@ class BinauralBeatGenerator {
 
     stop() {
         try {
+            // Stop oscillators
             if (this.leftOscillator) {
                 this.leftOscillator.stop();
                 this.leftOscillator.disconnect();
@@ -213,6 +349,13 @@ class BinauralBeatGenerator {
                 this.rightOscillator.stop();
                 this.rightOscillator.disconnect();
                 this.rightOscillator = null;
+            }
+
+            // Stop music
+            if (this.musicSource) {
+                this.musicSource.stop();
+                this.musicSource.disconnect();
+                this.musicSource = null;
             }
 
             this.isPlaying = false;

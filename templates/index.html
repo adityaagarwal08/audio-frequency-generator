@@ -72,16 +72,47 @@
                             </div>
                         </div>
 
-                        <!-- Volume Control -->
+                        <!-- Music Upload -->
                         <div class="mb-4">
-                            <label for="volume" class="form-label">
-                                <i class="fas fa-volume-up me-2"></i>Volume
+                            <label for="musicFile" class="form-label">
+                                <i class="fas fa-music me-2"></i>Background Music (Optional)
                             </label>
-                            <input type="range" class="form-range" id="volume" 
+                            <input type="file" class="form-control" id="musicFile" 
+                                   accept="audio/*" aria-describedby="musicHelp">
+                            <div id="musicHelp" class="form-text">
+                                Upload an audio file to mix with binaural beats. Supports MP3, WAV, OGG formats.
+                            </div>
+                            <div class="mt-2">
+                                <button id="clearMusic" class="btn btn-outline-secondary btn-sm d-none">
+                                    <i class="fas fa-times me-1"></i>Clear Music
+                                </button>
+                                <span id="musicStatus" class="badge bg-secondary ms-2 d-none"></span>
+                            </div>
+                        </div>
+
+                        <!-- Volume Controls -->
+                        <div class="mb-4">
+                            <label for="binauralVolume" class="form-label">
+                                <i class="fas fa-wave-square me-2"></i>Binaural Beats Volume
+                            </label>
+                            <input type="range" class="form-range" id="binauralVolume" 
                                    min="0" max="1" value="0.5" step="0.01">
                             <div class="d-flex justify-content-between text-muted small mt-1">
                                 <span>0%</span>
                                 <span>50%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+
+                        <div class="mb-4" id="musicVolumeControl" style="display: none;">
+                            <label for="musicVolume" class="form-label">
+                                <i class="fas fa-music me-2"></i>Music Volume
+                            </label>
+                            <input type="range" class="form-range" id="musicVolume" 
+                                   min="0" max="1" value="0.3" step="0.01">
+                            <div class="d-flex justify-content-between text-muted small mt-1">
+                                <span>0%</span>
+                                <span>30%</span>
                                 <span>100%</span>
                             </div>
                         </div>
