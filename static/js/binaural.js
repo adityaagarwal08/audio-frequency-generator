@@ -131,6 +131,7 @@ class BinauralBeatGenerator {
             // Show music status and controls
             this.musicStatus.textContent = `Loading: ${file.name}`;
             this.musicStatus.classList.remove('d-none');
+            this.musicStatus.classList.remove('bg-success', 'bg-danger');
             this.musicStatus.classList.add('bg-info');
             this.clearMusicBtn.classList.remove('d-none');
 
@@ -139,7 +140,10 @@ class BinauralBeatGenerator {
             
             // Initialize audio context if needed
             if (!this.audioContext) {
-                await this.initializeAudioContext();
+                const initialized = await this.initializeAudioContext();
+                if (!initialized) {
+                    throw new Error('Failed to initialize audio context');
+                }
             }
 
             // Decode audio data
@@ -152,6 +156,12 @@ class BinauralBeatGenerator {
             this.musicStatus.classList.remove('bg-info');
             this.musicStatus.classList.add('bg-success');
             this.updateStatus('Music file loaded successfully', 'success');
+
+            console.log('Music buffer loaded:', {
+                duration: this.musicBuffer.duration,
+                sampleRate: this.musicBuffer.sampleRate,
+                numberOfChannels: this.musicBuffer.numberOfChannels
+            });
 
         } catch (error) {
             console.error('Error loading music file:', error);
@@ -215,6 +225,14 @@ class BinauralBeatGenerator {
             // Create channel merger for stereo binaural output
             this.merger = this.audioContext.createChannelMerger(2);
             this.merger.connect(this.binauralGainNode);
+
+            console.log('Audio context initialized with nodes:', {
+                audioContext: !!this.audioContext,
+                masterGain: !!this.masterGain,
+                binauralGainNode: !!this.binauralGainNode,
+                musicGainNode: !!this.musicGainNode,
+                merger: !!this.merger
+            });
 
             return true;
         } catch (error) {
@@ -291,7 +309,10 @@ class BinauralBeatGenerator {
             // Start music if available
             if (this.hasMusicFile && this.musicBuffer) {
                 this.createMusicSource();
-                this.musicSource.start();
+                if (this.musicSource) {
+                    this.musicSource.start();
+                    console.log('Music source started');
+                }
             }
 
             this.isPlaying = true;
@@ -306,24 +327,39 @@ class BinauralBeatGenerator {
     }
 
     createMusicSource() {
-        if (!this.musicBuffer || !this.audioContext) return;
+        if (!this.musicBuffer || !this.audioContext || !this.musicGainNode) {
+            console.log('Missing requirements for music source:', {
+                musicBuffer: !!this.musicBuffer,
+                audioContext: !!this.audioContext,
+                musicGainNode: !!this.musicGainNode
+            });
+            return null;
+        }
 
         try {
             this.musicSource = this.audioContext.createBufferSource();
             this.musicSource.buffer = this.musicBuffer;
             this.musicSource.loop = true; // Loop the music
             this.musicSource.connect(this.musicGainNode);
+            
+            console.log('Music source created and connected to gain node');
 
             // Handle music ending (in case loop fails)
             this.musicSource.onended = () => {
+                console.log('Music ended, restarting...');
                 if (this.isPlaying && !this.isPaused) {
                     // Restart music if still playing
-                    this.createMusicSource();
-                    this.musicSource.start();
+                    const newSource = this.createMusicSource();
+                    if (newSource) {
+                        newSource.start();
+                    }
                 }
             };
+            
+            return this.musicSource;
         } catch (error) {
             console.error('Failed to create music source:', error);
+            return null;
         }
     }
 
