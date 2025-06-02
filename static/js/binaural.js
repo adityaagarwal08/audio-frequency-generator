@@ -463,7 +463,7 @@ class BinauralBeatGenerator {
 
     stop() {
         try {
-            // Stop oscillators
+            // Stop binaural oscillators
             if (this.leftOscillator) {
                 this.leftOscillator.stop();
                 this.leftOscillator.disconnect();
@@ -474,6 +474,13 @@ class BinauralBeatGenerator {
                 this.rightOscillator.stop();
                 this.rightOscillator.disconnect();
                 this.rightOscillator = null;
+            }
+
+            // Stop mono oscillator
+            if (this.monoOscillator) {
+                this.monoOscillator.stop();
+                this.monoOscillator.disconnect();
+                this.monoOscillator = null;
             }
 
             // Stop music
