@@ -3,6 +3,7 @@ class BinauralBeatGenerator {
         this.audioContext = null;
         this.leftOscillator = null;
         this.rightOscillator = null;
+        this.monoOscillator = null;
         this.binauralGainNode = null;
         this.musicGainNode = null;
         this.musicSource = null;
@@ -11,8 +12,10 @@ class BinauralBeatGenerator {
         this.masterGain = null;
         this.isPlaying = false;
         this.isPaused = false;
+        this.mode = 'binaural'; // 'binaural' or 'mono'
         this.baseFrequency = 300; // Fixed 300Hz base frequency
         this.beatFrequency = 0;
+        this.monoFrequency = 440; // Default A4 frequency
         this.binauralVolume = 0.5;
         this.musicVolume = 0.3;
         this.hasMusicFile = false;
@@ -25,6 +28,7 @@ class BinauralBeatGenerator {
     initializeElements() {
         // Control elements
         this.beatFrequencySlider = document.getElementById('beatFrequency');
+        this.monoFrequencySlider = document.getElementById('monoFrequency');
         this.binauralVolumeSlider = document.getElementById('binauralVolume');
         this.musicVolumeSlider = document.getElementById('musicVolume');
         this.musicFileInput = document.getElementById('musicFile');
@@ -33,14 +37,25 @@ class BinauralBeatGenerator {
         this.pauseBtn = document.getElementById('pauseBtn');
         this.stopBtn = document.getElementById('stopBtn');
 
+        // Mode selection
+        this.binauralModeBtn = document.getElementById('binauralMode');
+        this.monoModeBtn = document.getElementById('monoMode');
+
         // Display elements
         this.rightFreqDisplay = document.getElementById('rightFreqDisplay');
         this.beatFreqDisplay = document.getElementById('beatFreqDisplay');
         this.beatTypeDisplay = document.getElementById('beatTypeDisplay');
+        this.monoFreqDisplay = document.getElementById('monoFreqDisplay');
         this.statusDisplay = document.getElementById('statusDisplay');
         this.browserWarning = document.getElementById('browserWarning');
         this.musicStatus = document.getElementById('musicStatus');
         this.musicVolumeControl = document.getElementById('musicVolumeControl');
+
+        // Sections
+        this.beatFreqSection = document.getElementById('beatFreqSection');
+        this.monoFreqSection = document.getElementById('monoFreqSection');
+        this.beatFreqControl = document.getElementById('beatFreqControl');
+        this.monoFreqControl = document.getElementById('monoFreqControl');
     }
 
     checkBrowserSupport() {
@@ -66,13 +81,39 @@ class BinauralBeatGenerator {
     }
 
     setupEventListeners() {
+        // Mode selection
+        this.binauralModeBtn.addEventListener('change', () => this.switchMode('binaural'));
+        this.monoModeBtn.addEventListener('change', () => this.switchMode('mono'));
+
         // Beat frequency slider
         this.beatFrequencySlider.addEventListener('input', (e) => {
             this.beatFrequency = parseFloat(e.target.value);
             this.updateFrequencyDisplays();
-            if (this.isPlaying) {
+            if (this.isPlaying && this.mode === 'binaural') {
                 this.updateOscillatorFrequencies();
             }
+        });
+
+        // Mono frequency slider
+        this.monoFrequencySlider.addEventListener('input', (e) => {
+            this.monoFrequency = parseFloat(e.target.value);
+            this.updateFrequencyDisplays();
+            if (this.isPlaying && this.mode === 'mono') {
+                this.updateOscillatorFrequencies();
+            }
+        });
+
+        // Preset frequency buttons
+        document.querySelectorAll('[data-freq]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const freq = parseInt(e.target.dataset.freq);
+                this.monoFrequency = freq;
+                this.monoFrequencySlider.value = freq;
+                this.updateFrequencyDisplays();
+                if (this.isPlaying && this.mode === 'mono') {
+                    this.updateOscillatorFrequencies();
+                }
+            });
         });
 
         // Binaural volume slider
@@ -103,13 +144,40 @@ class BinauralBeatGenerator {
         this.stopBtn.addEventListener('click', () => this.stop());
     }
 
-    updateFrequencyDisplays() {
-        const rightFreq = this.baseFrequency + this.beatFrequency;
-        this.rightFreqDisplay.textContent = `${rightFreq.toFixed(1)} Hz`;
-        this.beatFreqDisplay.textContent = `${this.beatFrequency.toFixed(1)} Hz`;
+    switchMode(mode) {
+        this.mode = mode;
         
-        // Update beat type description
-        this.beatTypeDisplay.textContent = this.getBeatTypeDescription(this.beatFrequency);
+        if (mode === 'binaural') {
+            this.beatFreqSection.style.display = 'block';
+            this.monoFreqSection.style.display = 'none';
+            this.beatFreqControl.style.display = 'block';
+            this.monoFreqControl.style.display = 'none';
+        } else {
+            this.beatFreqSection.style.display = 'none';
+            this.monoFreqSection.style.display = 'block';
+            this.beatFreqControl.style.display = 'none';
+            this.monoFreqControl.style.display = 'block';
+        }
+        
+        this.updateFrequencyDisplays();
+        
+        // Stop current playback if switching modes
+        if (this.isPlaying) {
+            this.stop();
+        }
+    }
+
+    updateFrequencyDisplays() {
+        if (this.mode === 'binaural') {
+            const rightFreq = this.baseFrequency + this.beatFrequency;
+            this.rightFreqDisplay.textContent = `${rightFreq.toFixed(1)} Hz`;
+            this.beatFreqDisplay.textContent = `${this.beatFrequency.toFixed(1)} Hz`;
+            
+            // Update beat type description
+            this.beatTypeDisplay.textContent = this.getBeatTypeDescription(this.beatFrequency);
+        } else {
+            this.monoFreqDisplay.textContent = `${this.monoFrequency.toFixed(0)} Hz`;
+        }
     }
 
     getBeatTypeDescription(frequency) {
@@ -244,20 +312,28 @@ class BinauralBeatGenerator {
 
     createOscillators() {
         try {
-            // Left oscillator (300Hz fixed)
-            this.leftOscillator = this.audioContext.createOscillator();
-            this.leftOscillator.type = 'sine';
-            this.leftOscillator.frequency.setValueAtTime(this.baseFrequency, this.audioContext.currentTime);
-            this.leftOscillator.connect(this.merger, 0, 0); // Connect to left channel
+            if (this.mode === 'binaural') {
+                // Left oscillator (300Hz fixed)
+                this.leftOscillator = this.audioContext.createOscillator();
+                this.leftOscillator.type = 'sine';
+                this.leftOscillator.frequency.setValueAtTime(this.baseFrequency, this.audioContext.currentTime);
+                this.leftOscillator.connect(this.merger, 0, 0); // Connect to left channel
 
-            // Right oscillator (300Hz + beat frequency)
-            this.rightOscillator = this.audioContext.createOscillator();
-            this.rightOscillator.type = 'sine';
-            this.rightOscillator.frequency.setValueAtTime(
-                this.baseFrequency + this.beatFrequency, 
-                this.audioContext.currentTime
-            );
-            this.rightOscillator.connect(this.merger, 0, 1); // Connect to right channel
+                // Right oscillator (300Hz + beat frequency)
+                this.rightOscillator = this.audioContext.createOscillator();
+                this.rightOscillator.type = 'sine';
+                this.rightOscillator.frequency.setValueAtTime(
+                    this.baseFrequency + this.beatFrequency, 
+                    this.audioContext.currentTime
+                );
+                this.rightOscillator.connect(this.merger, 0, 1); // Connect to right channel
+            } else {
+                // Monochromatic oscillator
+                this.monoOscillator = this.audioContext.createOscillator();
+                this.monoOscillator.type = 'sine';
+                this.monoOscillator.frequency.setValueAtTime(this.monoFrequency, this.audioContext.currentTime);
+                this.monoOscillator.connect(this.binauralGainNode); // Connect directly to gain node
+            }
 
             return true;
         } catch (error) {
@@ -268,12 +344,18 @@ class BinauralBeatGenerator {
     }
 
     updateOscillatorFrequencies() {
-        if (this.leftOscillator && this.rightOscillator) {
+        if (this.mode === 'binaural' && this.leftOscillator && this.rightOscillator) {
             try {
                 const rightFreq = this.baseFrequency + this.beatFrequency;
                 this.rightOscillator.frequency.setValueAtTime(rightFreq, this.audioContext.currentTime);
             } catch (error) {
-                console.error('Failed to update frequencies:', error);
+                console.error('Failed to update binaural frequencies:', error);
+            }
+        } else if (this.mode === 'mono' && this.monoOscillator) {
+            try {
+                this.monoOscillator.frequency.setValueAtTime(this.monoFrequency, this.audioContext.currentTime);
+            } catch (error) {
+                console.error('Failed to update mono frequency:', error);
             }
         }
     }
@@ -303,8 +385,12 @@ class BinauralBeatGenerator {
             // Create and start oscillators
             if (!this.createOscillators()) return;
 
-            this.leftOscillator.start();
-            this.rightOscillator.start();
+            if (this.mode === 'binaural') {
+                this.leftOscillator.start();
+                this.rightOscillator.start();
+            } else {
+                this.monoOscillator.start();
+            }
 
             // Start music if available
             if (this.hasMusicFile && this.musicBuffer) {
@@ -317,7 +403,10 @@ class BinauralBeatGenerator {
 
             this.isPlaying = true;
             this.isPaused = false;
-            this.updateStatus(this.hasMusicFile ? 'Playing with music' : 'Playing', 'success');
+            const statusText = this.hasMusicFile ? 
+                `Playing ${this.mode} with music` : 
+                `Playing ${this.mode}`;
+            this.updateStatus(statusText, 'success');
             this.updateControlStates();
 
         } catch (error) {

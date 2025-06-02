@@ -47,8 +47,22 @@
                             </div>
                         </div>
 
+                        <!-- Mode Selection -->
+                        <div class="mb-4">
+                            <label class="form-label">
+                                <i class="fas fa-cog me-2"></i>Generation Mode
+                            </label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="mode" id="binauralMode" checked>
+                                <label class="btn btn-outline-primary" for="binauralMode">Binaural Beats</label>
+                                
+                                <input type="radio" class="btn-check" name="mode" id="monoMode">
+                                <label class="btn btn-outline-primary" for="monoMode">Monochromatic</label>
+                            </div>
+                        </div>
+
                         <!-- Beat Frequency Display -->
-                        <div class="text-center mb-4">
+                        <div class="text-center mb-4" id="beatFreqSection">
                             <div class="card bg-dark">
                                 <div class="card-body py-3">
                                     <h5 class="card-title mb-1">Beat Frequency</h5>
@@ -58,8 +72,19 @@
                             </div>
                         </div>
 
+                        <!-- Monochromatic Frequency Display -->
+                        <div class="text-center mb-4" id="monoFreqSection" style="display: none;">
+                            <div class="card bg-dark">
+                                <div class="card-body py-3">
+                                    <h5 class="card-title mb-1">Frequency</h5>
+                                    <h2 class="text-success mb-0" id="monoFreqDisplay">440 Hz</h2>
+                                    <small class="text-muted">Monochromatic Tone</small>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Beat Frequency Control -->
-                        <div class="mb-4">
+                        <div class="mb-4" id="beatFreqControl">
                             <label for="beatFrequency" class="form-label">
                                 <i class="fas fa-sliders-h me-2"></i>Beat Frequency (0-50 Hz)
                             </label>
@@ -69,6 +94,27 @@
                                 <span>0 Hz</span>
                                 <span>25 Hz</span>
                                 <span>50 Hz</span>
+                            </div>
+                        </div>
+
+                        <!-- Monochromatic Frequency Control -->
+                        <div class="mb-4" id="monoFreqControl" style="display: none;">
+                            <label for="monoFrequency" class="form-label">
+                                <i class="fas fa-sliders-h me-2"></i>Frequency (20-20000 Hz)
+                            </label>
+                            <input type="range" class="form-range" id="monoFrequency" 
+                                   min="20" max="20000" value="440" step="1">
+                            <div class="d-flex justify-content-between text-muted small mt-1">
+                                <span>20 Hz</span>
+                                <span>440 Hz (A4)</span>
+                                <span>20 kHz</span>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">Common frequencies: 
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-1" data-freq="440">A4 (440Hz)</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-1" data-freq="528">528Hz</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-1" data-freq="432">432Hz</button>
+                                </small>
                             </div>
                         </div>
 
