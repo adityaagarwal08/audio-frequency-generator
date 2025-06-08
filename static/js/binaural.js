@@ -29,6 +29,10 @@ class BinauralBeatGenerator {
         // Control elements
         this.beatFrequencySlider = document.getElementById('beatFrequency');
         this.monoFrequencySlider = document.getElementById('monoFrequency');
+        this.beatFreqInput = document.getElementById('beatFreqInput');
+        this.monoFreqInput = document.getElementById('monoFreqInput');
+        this.setBeatFreqBtn = document.getElementById('setBeatFreq');
+        this.setMonoFreqBtn = document.getElementById('setMonoFreq');
         this.binauralVolumeSlider = document.getElementById('binauralVolume');
         this.musicVolumeSlider = document.getElementById('musicVolume');
         this.musicFileInput = document.getElementById('musicFile');
@@ -88,6 +92,7 @@ class BinauralBeatGenerator {
         // Beat frequency slider
         this.beatFrequencySlider.addEventListener('input', (e) => {
             this.beatFrequency = parseFloat(e.target.value);
+            this.beatFreqInput.value = this.beatFrequency.toFixed(1);
             this.updateFrequencyDisplays();
             if (this.isPlaying && this.mode === 'binaural') {
                 this.updateOscillatorFrequencies();
@@ -97,9 +102,56 @@ class BinauralBeatGenerator {
         // Mono frequency slider
         this.monoFrequencySlider.addEventListener('input', (e) => {
             this.monoFrequency = parseFloat(e.target.value);
+            this.monoFreqInput.value = this.monoFrequency;
             this.updateFrequencyDisplays();
             if (this.isPlaying && this.mode === 'mono') {
                 this.updateOscillatorFrequencies();
+            }
+        });
+
+        // Beat frequency input and set button
+        this.setBeatFreqBtn.addEventListener('click', () => {
+            const value = parseFloat(this.beatFreqInput.value);
+            if (!isNaN(value) && value >= 0 && value <= 50) {
+                this.beatFrequency = value;
+                this.beatFrequencySlider.value = value;
+                this.updateFrequencyDisplays();
+                if (this.isPlaying && this.mode === 'binaural') {
+                    this.updateOscillatorFrequencies();
+                }
+            } else {
+                alert('Please enter a valid frequency between 0 and 50 Hz');
+                this.beatFreqInput.value = this.beatFrequency.toFixed(1);
+            }
+        });
+
+        // Allow Enter key to set beat frequency
+        this.beatFreqInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.setBeatFreqBtn.click();
+            }
+        });
+
+        // Mono frequency input and set button
+        this.setMonoFreqBtn.addEventListener('click', () => {
+            const value = parseFloat(this.monoFreqInput.value);
+            if (!isNaN(value) && value >= 20 && value <= 20000) {
+                this.monoFrequency = value;
+                this.monoFrequencySlider.value = value;
+                this.updateFrequencyDisplays();
+                if (this.isPlaying && this.mode === 'mono') {
+                    this.updateOscillatorFrequencies();
+                }
+            } else {
+                alert('Please enter a valid frequency between 20 and 20000 Hz');
+                this.monoFreqInput.value = this.monoFrequency;
+            }
+        });
+
+        // Allow Enter key to set mono frequency
+        this.monoFreqInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.setMonoFreqBtn.click();
             }
         });
 
@@ -109,6 +161,7 @@ class BinauralBeatGenerator {
                 const freq = parseInt(e.target.dataset.freq);
                 this.monoFrequency = freq;
                 this.monoFrequencySlider.value = freq;
+                this.monoFreqInput.value = freq;
                 this.updateFrequencyDisplays();
                 if (this.isPlaying && this.mode === 'mono') {
                     this.updateOscillatorFrequencies();
