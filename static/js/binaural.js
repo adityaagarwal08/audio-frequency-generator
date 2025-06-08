@@ -147,16 +147,28 @@ class BinauralBeatGenerator {
     switchMode(mode) {
         this.mode = mode;
         
+        // Update volume label based on mode
+        const volumeLabel = this.binauralVolumeSlider.parentElement.querySelector('label');
+        const volumeIcon = volumeLabel.querySelector('i');
+        
         if (mode === 'binaural') {
             this.beatFreqSection.style.display = 'block';
             this.monoFreqSection.style.display = 'none';
             this.beatFreqControl.style.display = 'block';
             this.monoFreqControl.style.display = 'none';
+            
+            // Update volume label to binaural
+            volumeIcon.className = 'fas fa-wave-square me-2';
+            volumeLabel.innerHTML = '<i class="fas fa-wave-square me-2"></i>Binaural Beats Volume';
         } else {
             this.beatFreqSection.style.display = 'none';
             this.monoFreqSection.style.display = 'block';
             this.beatFreqControl.style.display = 'none';
             this.monoFreqControl.style.display = 'block';
+            
+            // Update volume label to monochromatic
+            volumeIcon.className = 'fas fa-volume-up me-2';
+            volumeLabel.innerHTML = '<i class="fas fa-volume-up me-2"></i>Monochromatic Volume';
         }
         
         this.updateFrequencyDisplays();
