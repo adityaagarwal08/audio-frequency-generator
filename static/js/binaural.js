@@ -456,6 +456,21 @@ class BinauralBeatGenerator {
             } else {
                 this.monoOscillator.start();
             }
+// === Enable recording for download ===
+const destination = this.audioContext.createMediaStreamDestination();
+this.masterGain.connect(destination);
+this.mediaRecorder = new MediaRecorder(destination.stream);
+this.chunks = [];
+this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
+this.mediaRecorder.onstop = () => {
+  const blob = new Blob(this.chunks, { type: 'audio/webm' });
+  const url = URL.createObjectURL(blob);
+  const dl = document.getElementById('downloadLink');
+  dl.href = url;
+  dl.download = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.webm`;
+  dl.classList.remove('d-none');
+};
+this.mediaRecorder.start();
 
             // Start music if available
             if (this.hasMusicFile && this.musicBuffer) {
@@ -554,6 +569,10 @@ class BinauralBeatGenerator {
                 this.musicSource.disconnect();
                 this.musicSource = null;
             }
+// Stop media recorder if recording
+if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+    this.mediaRecorder.stop();
+}
 
             this.isPlaying = false;
             this.isPaused = false;
