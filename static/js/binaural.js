@@ -457,20 +457,28 @@ class BinauralBeatGenerator {
                 this.monoOscillator.start();
             }
 // === Enable recording for download ===
-const destination = this.audioContext.createMediaStreamDestination();
-this.masterGain.connect(destination);
-this.mediaRecorder = new MediaRecorder(destination.stream);
-this.chunks = [];
-this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
-this.mediaRecorder.onstop = () => {
-  const blob = new Blob(this.chunks, { type: 'audio/webm' });
-  const url = URL.createObjectURL(blob);
-  const dl = document.getElementById('downloadLink');
-  dl.href = url;
-  dl.download = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.webm`;
-  dl.classList.remove('d-none');
-};
-this.mediaRecorder.start();
+ const destination = this.audioContext.createMediaStreamDestination();
+  this.masterGain.connect(destination);
+
+  // choose MP4/AAC if available, otherwise WebM/Opus
+  const mime = MediaRecorder.isTypeSupported('audio/mp4;codecs="mp4a.40.2"')
+    ? 'audio/mp4;codecs="mp4a.40.2"'
+    : 'audio/webm;codecs=opus';
+
+  this.mediaRecorder = new MediaRecorder(destination.stream, { mimeType: mime });
+  this.chunks = [];
+  this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
+
+  this.mediaRecorder.onstop = () => {
+    const blob = new Blob(this.chunks, { type: mime });
+    const url  = URL.createObjectURL(blob);
+    const dl   = document.getElementById('downloadLink');
+    dl.href          = url;
+    dl.download      = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
+    dl.classList.remove('d-none');
+  };
+
+  this.mediaRecorder.start();
 
             // Start music if available
             if (this.hasMusicFile && this.musicBuffer) {
