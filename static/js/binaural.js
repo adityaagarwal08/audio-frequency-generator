@@ -513,80 +513,87 @@ this.mediaRecorder.onstop = async () => {
   dl.download = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
   dl.classList.remove('d-none');
 
-  // 2) Decode into AudioBuffer
-  const arrayBuffer = await blob.arrayBuffer();
-  const audioCtx    = new AudioContext();
-  const audioBuf    = await audioCtx.decodeAudioData(arrayBuffer);
+ try {
+    console.log("🔍 Starting validation…");
 
-  // 3) Prepare offline context for analysis
-  const offlineCtx = new OfflineAudioContext(1, audioBuf.length, audioBuf.sampleRate);
-  const src        = offlineCtx.createBufferSource();
-  src.buffer       = audioBuf;
+    const arrayBuffer = await blob.arrayBuffer();
+    console.log("🔍 Decoded blob to ArrayBuffer:", arrayBuffer.byteLength);
 
-  // 4) For binaural, mix stereo->mono; for mono, just use itself
-  let inputNode;
-  if (this.mode === 'binaural') {
-    // merge left/right channels into mono
-    const merger = offlineCtx.createChannelMerger(1);
-    src.connect(merger, 0, 0);
-    src.connect(merger, 1, 0);
-    inputNode = merger;
-  } else {
-    // single channel already
-    inputNode = src;
-  }
+    const audioCtx = new AudioContext();
+    const audioBuf = await audioCtx.decodeAudioData(arrayBuffer);
+    console.log("🔍 Decoded AudioBuffer:", audioBuf.length, "samples");
 
-  // 5) Low-pass filter at 100 Hz to isolate beat envelope
-  const filter = offlineCtx.createBiquadFilter();
-  filter.type       = 'lowpass';
-  filter.frequency.value = 100;
-  inputNode.connect(filter);
-  filter.connect(offlineCtx.destination);
+    // Setup offline context
+    const offlineCtx = new OfflineAudioContext(1, audioBuf.length, audioBuf.sampleRate);
+    const src        = offlineCtx.createBufferSource();
+    src.buffer       = audioBuf;
 
-  // 6) Start & render
-  src.start();
-  const rendered = await offlineCtx.startRendering();
-
-  // 7) Analyse rendered buffer
-  const analyser = offlineCtx.createAnalyser();
-  analyser.fftSize = 16384; // high resolution
-  const data = new Float32Array(analyser.frequencyBinCount);
-
-  // Connect rendered buffer to analyser
-  const analysisCtx = new OfflineAudioContext(1, rendered.length, rendered.sampleRate);
-  const analysisSrc = analysisCtx.createBufferSource();
-  analysisSrc.buffer = rendered;
-  analysisSrc.connect(analyser);
-  analyser.connect(analysisCtx.destination);
-  analysisSrc.start();
-  await analysisCtx.startRendering();
-
-  analyser.getFloatFrequencyData(data);
-
-  // 8) Find peak bin
-  let maxVal = -Infinity, maxIdx = 0;
-  for (let i = 0; i < data.length; i++) {
-    if (data[i] > maxVal) {
-      maxVal = data[i];
-      maxIdx = i;
+    // For binaural mode, merge stereo → mono
+    if (this.mode === 'binaural') {
+      const merger = offlineCtx.createChannelMerger(1);
+      src.connect(merger, 0, 0);
+      src.connect(merger, 1, 0);
+      merger.connect(offlineCtx.destination);
+    } else {
+      src.connect(offlineCtx.destination);
     }
-  }
-  const detectedHz = maxIdx * analysisCtx.sampleRate / analyser.fftSize;
 
-  // 9) Determine target frequency
-  const targetHz = this.mode === 'binaural'
-    ? this.beatFrequency              // user‑set beat freq
-    : this.monoFrequency;             // user‑set tone freq
+    // Low-pass filter
+    const filter = offlineCtx.createBiquadFilter();
+    filter.type           = 'lowpass';
+    filter.frequency.value = 100;
+    // Re-route: src → filter → destination
+    src.disconnect();
+    src.connect(filter);
+    filter.connect(offlineCtx.destination);
 
-  // 10) Compare with tolerance
-  const tol = 1.0; // ±1 Hz
-  if (Math.abs(detectedHz - targetHz) <= tol) {
-    this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
-  } else {
-    this.updateStatus(
-      `❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`,
-      'danger'
-    );
+    src.start();
+    const rendered = await offlineCtx.startRendering();
+    console.log("🔍 Offline rendering complete:", rendered.length, "samples");
+
+    // Analyse
+    const analysisCtx = new OfflineAudioContext(1, rendered.length, rendered.sampleRate);
+    const analysisSrc = analysisCtx.createBufferSource();
+    analysisSrc.buffer = rendered;
+
+    const analyser = analysisCtx.createAnalyser();
+    analyser.fftSize = 16384;
+
+    analysisSrc.connect(analyser);
+    analyser.connect(analysisCtx.destination);
+    analysisSrc.start();
+    await analysisCtx.startRendering();
+
+    const data = new Float32Array(analyser.frequencyBinCount);
+    analyser.getFloatFrequencyData(data);
+    console.log("🔍 FFT data length:", data.length);
+
+    // Find peak
+    let maxVal = -Infinity, maxIdx = 0;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] > maxVal) {
+        maxVal = data[i];
+        maxIdx = i;
+      }
+    }
+    const detectedHz = maxIdx * analysisCtx.sampleRate / analyser.fftSize;
+    console.log("🔍 Detected Hz:", detectedHz.toFixed(2));
+
+    // Compare
+    const targetHz = this.mode === 'binaural'
+      ? this.beatFrequency
+      : this.monoFrequency;
+    console.log("🔍 Target Hz:", targetHz);
+
+    const tol = 1.0;
+    if (Math.abs(detectedHz - targetHz) <= tol) {
+      this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
+    } else {
+      this.updateStatus(`❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`, 'danger');
+    }
+  } catch (err) {
+    console.error("🚨 Validation error:", err);
+    this.updateStatus("❌ Validation failed", "danger");
   }
 };
 
