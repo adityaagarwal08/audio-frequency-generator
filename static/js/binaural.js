@@ -504,38 +504,92 @@ class BinauralBeatGenerator {
   this.chunks = [];
   this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
 
- this.mediaRecorder.onstop = async () => {
+this.mediaRecorder.onstop = async () => {
   // 1) Make the blob & show download link
   const blob = new Blob(this.chunks, { type: mime });
   const url  = URL.createObjectURL(blob);
   const dl   = document.getElementById('downloadLink');
-  dl.href          = url;
-  dl.download      = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
+  dl.href     = url;
+  dl.download = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
   dl.classList.remove('d-none');
 
-  // 2) Validate generated frequency
+  // 2) Decode into AudioBuffer
   const arrayBuffer = await blob.arrayBuffer();
   const audioCtx    = new AudioContext();
   const audioBuf    = await audioCtx.decodeAudioData(arrayBuffer);
-  const detectedHz  = await estimateFrequency(audioBuf);
-  // In binaural, beat frequency = rightFreq - leftFreq
-  const targetHz    = this.mode === 'binaural'
-    ? Math.abs(this.beatFrequency)
-: this.monoFrequency;
-  const tol = 1.0;  // acceptable ±1 Hz
 
+  // 3) Prepare offline context for analysis
+  const offlineCtx = new OfflineAudioContext(1, audioBuf.length, audioBuf.sampleRate);
+  const src        = offlineCtx.createBufferSource();
+  src.buffer       = audioBuf;
+
+  // 4) For binaural, mix stereo->mono; for mono, just use itself
+  let inputNode;
+  if (this.mode === 'binaural') {
+    // merge left/right channels into mono
+    const merger = offlineCtx.createChannelMerger(1);
+    src.connect(merger, 0, 0);
+    src.connect(merger, 1, 0);
+    inputNode = merger;
+  } else {
+    // single channel already
+    inputNode = src;
+  }
+
+  // 5) Low-pass filter at 100 Hz to isolate beat envelope
+  const filter = offlineCtx.createBiquadFilter();
+  filter.type       = 'lowpass';
+  filter.frequency.value = 100;
+  inputNode.connect(filter);
+  filter.connect(offlineCtx.destination);
+
+  // 6) Start & render
+  src.start();
+  const rendered = await offlineCtx.startRendering();
+
+  // 7) Analyse rendered buffer
+  const analyser = offlineCtx.createAnalyser();
+  analyser.fftSize = 16384; // high resolution
+  const data = new Float32Array(analyser.frequencyBinCount);
+
+  // Connect rendered buffer to analyser
+  const analysisCtx = new OfflineAudioContext(1, rendered.length, rendered.sampleRate);
+  const analysisSrc = analysisCtx.createBufferSource();
+  analysisSrc.buffer = rendered;
+  analysisSrc.connect(analyser);
+  analyser.connect(analysisCtx.destination);
+  analysisSrc.start();
+  await analysisCtx.startRendering();
+
+  analyser.getFloatFrequencyData(data);
+
+  // 8) Find peak bin
+  let maxVal = -Infinity, maxIdx = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] > maxVal) {
+      maxVal = data[i];
+      maxIdx = i;
+    }
+  }
+  const detectedHz = maxIdx * analysisCtx.sampleRate / analyser.fftSize;
+
+  // 9) Determine target frequency
+  const targetHz = this.mode === 'binaural'
+    ? this.beatFrequency              // user‑set beat freq
+    : this.monoFrequency;             // user‑set tone freq
+
+  // 10) Compare with tolerance
+  const tol = 1.0; // ±1 Hz
   if (Math.abs(detectedHz - targetHz) <= tol) {
-    this.updateStatus(
-      `✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`,
-      'success'
-    );
+    this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
   } else {
     this.updateStatus(
-      `❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`,
+      `❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`,
       'danger'
     );
   }
 };
+
 
 
   this.mediaRecorder.start();
