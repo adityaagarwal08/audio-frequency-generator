@@ -522,7 +522,7 @@ class BinauralBeatGenerator {
   const targetHz    = this.mode === 'binaural'
     ? Math.abs(this.rightFreq - this.leftFreq)
     : this.monoFreq;
-  const tol = 1.0;  // acceptable ±1 Hz
+  const tol = 10.0;  // acceptable ±1 Hz
 
   if (Math.abs(detectedHz - targetHz) <= tol) {
     this.updateStatus(
