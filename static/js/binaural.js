@@ -1,3 +1,38 @@
+
+async function estimateFrequency(buffer) {
+  // Create an offline context to render the buffer
+  const offlineCtx = new OfflineAudioContext(
+    1, buffer.length, buffer.sampleRate
+  );
+  const source = offlineCtx.createBufferSource();
+  source.buffer = buffer;
+
+  // Analyser for frequency data
+  const analyser = offlineCtx.createAnalyser();
+  analyser.fftSize = 2048;
+
+  source.connect(analyser);
+  analyser.connect(offlineCtx.destination);
+  source.start();
+
+  // Render and then grab frequency data
+  await offlineCtx.startRendering();
+  const data = new Float32Array(analyser.frequencyBinCount);
+  analyser.getFloatFrequencyData(data);
+
+  // Find the index of the highest magnitude bin
+  let maxVal = -Infinity, maxIdx = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] > maxVal) {
+      maxVal = data[i];
+      maxIdx = i;
+    }
+  }
+
+  // Convert bin index to actual Hz
+  return maxIdx * offlineCtx.sampleRate / analyser.fftSize;
+}
+
 class BinauralBeatGenerator {
     constructor() {
         this.audioContext = null;
@@ -469,14 +504,39 @@ class BinauralBeatGenerator {
   this.chunks = [];
   this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
 
-  this.mediaRecorder.onstop = () => {
-    const blob = new Blob(this.chunks, { type: mime });
-    const url  = URL.createObjectURL(blob);
-    const dl   = document.getElementById('downloadLink');
-    dl.href          = url;
-    dl.download      = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
-    dl.classList.remove('d-none');
-  };
+ this.mediaRecorder.onstop = async () => {
+  // 1) Make the blob & show download link
+  const blob = new Blob(this.chunks, { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const dl   = document.getElementById('downloadLink');
+  dl.href          = url;
+  dl.download      = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
+  dl.classList.remove('d-none');
+
+  // 2) Validate generated frequency
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioCtx    = new AudioContext();
+  const audioBuf    = await audioCtx.decodeAudioData(arrayBuffer);
+  const detectedHz  = await estimateFrequency(audioBuf);
+  // In binaural, beat frequency = rightFreq - leftFreq
+  const targetHz    = this.mode === 'binaural'
+    ? Math.abs(this.rightFreq - this.leftFreq)
+    : this.monoFreq;
+  const tol = 1.0;  // acceptable ±1 Hz
+
+  if (Math.abs(detectedHz - targetHz) <= tol) {
+    this.updateStatus(
+      `✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`,
+      'success'
+    );
+  } else {
+    this.updateStatus(
+      `❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`,
+      'danger'
+    );
+  }
+};
+
 
   this.mediaRecorder.start();
 
