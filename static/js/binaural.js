@@ -585,7 +585,7 @@ if (Math.abs(detectedHz - targetHz) <= tol) {
 } else {
   this.updateStatus(`❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`, 'danger');
 }
-
+};
 
 
   this.mediaRecorder.start();
