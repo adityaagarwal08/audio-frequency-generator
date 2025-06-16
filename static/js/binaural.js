@@ -520,9 +520,9 @@ class BinauralBeatGenerator {
   const detectedHz  = await estimateFrequency(audioBuf);
   // In binaural, beat frequency = rightFreq - leftFreq
   const targetHz    = this.mode === 'binaural'
-    ? Math.abs(this.rightFreq - this.leftFreq)
-    : this.monoFreq;
-  const tol = 10.0;  // acceptable ±1 Hz
+    ? Math.abs(this.beatFrequency)
+: this.monoFrequency;
+  const tol = 1.0;  // acceptable ±1 Hz
 
   if (Math.abs(detectedHz - targetHz) <= tol) {
     this.updateStatus(
