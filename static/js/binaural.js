@@ -513,89 +513,78 @@ this.mediaRecorder.onstop = async () => {
   dl.download = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
   dl.classList.remove('d-none');
 
- try {
-    console.log("🔍 Starting validation…");
+// 2) Decode into AudioBuffer
+const arrayBuffer = await blob.arrayBuffer();
+const audioCtx    = new AudioContext();
+const audioBuf    = await audioCtx.decodeAudioData(arrayBuffer);
 
-    const arrayBuffer = await blob.arrayBuffer();
-    console.log("🔍 Decoded blob to ArrayBuffer:", arrayBuffer.byteLength);
+// 3) Create a mono buffer by averaging channels
+const numChannels = audioBuf.numberOfChannels;
+const length      = audioBuf.length;
+const sampleRate  = audioBuf.sampleRate;
+const monoBuffer  = audioCtx.createBuffer(1, length, sampleRate);
+const monoData    = monoBuffer.getChannelData(0);
 
-    const audioCtx = new AudioContext();
-    const audioBuf = await audioCtx.decodeAudioData(arrayBuffer);
-    console.log("🔍 Decoded AudioBuffer:", audioBuf.length, "samples");
-
-    // Setup offline context
-    const offlineCtx = new OfflineAudioContext(1, audioBuf.length, audioBuf.sampleRate);
-    const src        = offlineCtx.createBufferSource();
-    src.buffer       = audioBuf;
-
-    // For binaural mode, merge stereo → mono
-    if (this.mode === 'binaural') {
-      const merger = offlineCtx.createChannelMerger(1);
-      src.connect(merger, 0, 0);
-      src.connect(merger, 1, 0);
-      merger.connect(offlineCtx.destination);
-    } else {
-      src.connect(offlineCtx.destination);
-    }
-
-    // Low-pass filter
-    const filter = offlineCtx.createBiquadFilter();
-    filter.type           = 'lowpass';
-    filter.frequency.value = 100;
-    // Re-route: src → filter → destination
-    src.disconnect();
-    src.connect(filter);
-    filter.connect(offlineCtx.destination);
-
-    src.start();
-    const rendered = await offlineCtx.startRendering();
-    console.log("🔍 Offline rendering complete:", rendered.length, "samples");
-
-    // Analyse
-    const analysisCtx = new OfflineAudioContext(1, rendered.length, rendered.sampleRate);
-    const analysisSrc = analysisCtx.createBufferSource();
-    analysisSrc.buffer = rendered;
-
-    const analyser = analysisCtx.createAnalyser();
-    analyser.fftSize = 16384;
-
-    analysisSrc.connect(analyser);
-    analyser.connect(analysisCtx.destination);
-    analysisSrc.start();
-    await analysisCtx.startRendering();
-
-    const data = new Float32Array(analyser.frequencyBinCount);
-    analyser.getFloatFrequencyData(data);
-    console.log("🔍 FFT data length:", data.length);
-
-    // Find peak
-    let maxVal = -Infinity, maxIdx = 0;
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] > maxVal) {
-        maxVal = data[i];
-        maxIdx = i;
-      }
-    }
-    const detectedHz = maxIdx * analysisCtx.sampleRate / analyser.fftSize;
-    console.log("🔍 Detected Hz:", detectedHz.toFixed(2));
-
-    // Compare
-    const targetHz = this.mode === 'binaural'
-      ? this.beatFrequency
-      : this.monoFrequency;
-    console.log("🔍 Target Hz:", targetHz);
-
-    const tol = 1.0;
-    if (Math.abs(detectedHz - targetHz) <= tol) {
-      this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
-    } else {
-      this.updateStatus(`❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`, 'danger');
-    }
-  } catch (err) {
-    console.error("🚨 Validation error:", err);
-    this.updateStatus("❌ Validation failed", "danger");
+for (let c = 0; c < numChannels; c++) {
+  const channelData = audioBuf.getChannelData(c);
+  for (let i = 0; i < length; i++) {
+    monoData[i] += channelData[i] / numChannels;
   }
-};
+}
+
+// 4) Set up OfflineAudioContext for filtering & FFT
+const offlineCtx = new OfflineAudioContext(1, length, sampleRate);
+const src = offlineCtx.createBufferSource();
+src.buffer = monoBuffer;
+
+// 5) Low‑pass filter at 100 Hz
+const filter = offlineCtx.createBiquadFilter();
+filter.type = 'lowpass';
+filter.frequency.value = 100;
+
+src.connect(filter);
+filter.connect(offlineCtx.destination);
+
+src.start();
+const rendered = await offlineCtx.startRendering();
+
+// 6) Analyse the rendered, filtered buffer
+const analysisCtx = new OfflineAudioContext(1, rendered.length, rendered.sampleRate);
+const analysisSrc = analysisCtx.createBufferSource();
+analysisSrc.buffer = rendered;
+
+const analyser = analysisCtx.createAnalyser();
+analyser.fftSize = 16384;
+
+analysisSrc.connect(analyser);
+analyser.connect(analysisCtx.destination);
+analysisSrc.start();
+await analysisCtx.startRendering();
+
+const data = new Float32Array(analyser.frequencyBinCount);
+analyser.getFloatFrequencyData(data);
+
+// 7) Find the peak
+let maxVal = -Infinity, maxIdx = 0;
+for (let i = 0; i < data.length; i++) {
+  if (data[i] > maxVal) {
+    maxVal = data[i];
+    maxIdx = i;
+  }
+}
+const detectedHz = maxIdx * analysisCtx.sampleRate / analyser.fftSize;
+
+// 8) Compare to target
+const targetHz = this.mode === 'binaural'
+  ? this.beatFrequency
+  : this.monoFrequency;
+const tol = 1.0;
+
+if (Math.abs(detectedHz - targetHz) <= tol) {
+  this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
+} else {
+  this.updateStatus(`❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`, 'danger');
+}
 
 
 
