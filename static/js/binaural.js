@@ -522,64 +522,51 @@ const audioBuf    = await audioCtx.decodeAudioData(arrayBuffer);
 const numChannels = audioBuf.numberOfChannels;
 const length      = audioBuf.length;
 const sampleRate  = audioBuf.sampleRate;
-const monoBuffer  = audioCtx.createBuffer(1, length, sampleRate);
-const monoData    = monoBuffer.getChannelData(0);
+const monoData    = new Float32Array(length);
 
 for (let c = 0; c < numChannels; c++) {
-  const channelData = audioBuf.getChannelData(c);
+  const ch = audioBuf.getChannelData(c);
   for (let i = 0; i < length; i++) {
-    monoData[i] += channelData[i] / numChannels;
+    monoData[i] += ch[i] / numChannels;
   }
 }
 
-// 4) Set up OfflineAudioContext for filtering & FFT
-const offlineCtx = new OfflineAudioContext(1, length, sampleRate);
-const src = offlineCtx.createBufferSource();
-src.buffer = monoBuffer;
+// 2) Extract the envelope by full-wave rectification
+for (let i = 0; i < length; i++) {
+  monoData[i] = Math.abs(monoData[i]);
+}
 
-// 5) Low‑pass filter at 100 Hz
-const filter = offlineCtx.createBiquadFilter();
-filter.type = 'lowpass';
-filter.frequency.value = 100;
+// 3) Zero-pad or downsample envelope to a power‑of‑two length for FFT
+const fftSize = 16384;
+const buffer  = new Float32Array(fftSize);
+for (let i = 0; i < fftSize && i < length; i++) {
+  buffer[i] = monoData[i];
+}
 
-src.connect(filter);
-filter.connect(offlineCtx.destination);
+// 4) Run a simple FFT on `buffer` (using a small JS FFT lib)  
+// Here’s a minimal FFT import you can drop in, e.g. using dsp.js or kissfft.js.
+// For brevity, assume you have a function `fft(buffer)` that returns
+// `{ real: Float32Array, imag: Float32Array }` of length `fftSize`.
 
-src.start();
-const rendered = await offlineCtx.startRendering();
+const { real, imag } = fft(buffer);  
+const magnitudes = new Float32Array(fftSize / 2);
+for (let i = 0; i < fftSize / 2; i++) {
+  magnitudes[i] = Math.hypot(real[i], imag[i]);
+}
 
-// 6) Analyse the rendered, filtered buffer
-const analysisCtx = new OfflineAudioContext(1, rendered.length, rendered.sampleRate);
-const analysisSrc = analysisCtx.createBufferSource();
-analysisSrc.buffer = rendered;
-
-const analyser = analysisCtx.createAnalyser();
-analyser.fftSize = 16384;
-
-analysisSrc.connect(analyser);
-analyser.connect(analysisCtx.destination);
-analysisSrc.start();
-await analysisCtx.startRendering();
-
-const data = new Float32Array(analyser.frequencyBinCount);
-analyser.getFloatFrequencyData(data);
-
-// 7) Find the peak
-let maxVal = -Infinity, maxIdx = 0;
-for (let i = 0; i < data.length; i++) {
-  if (data[i] > maxVal) {
-    maxVal = data[i];
+// 5) Find the peak in `magnitudes`
+let maxIdx = 1, maxMag = magnitudes[1];
+for (let i = 2; i < magnitudes.length; i++) {
+  if (magnitudes[i] > maxMag) {
+    maxMag = magnitudes[i];
     maxIdx = i;
   }
 }
-const detectedHz = maxIdx * analysisCtx.sampleRate / analyser.fftSize;
+const detectedHz = maxIdx * sampleRate / fftSize;
 
-// 8) Compare to target
-const targetHz = this.mode === 'binaural'
-  ? this.beatFrequency
-  : this.monoFrequency;
-const tol = 1.0;
-
+// 6) Compare against your beatFrequency or monoFrequency
+const targetHz = this.mode === 'binaural' ? this.beatFrequency : this.monoFrequency;
+const tol = 0.5;  // ±0.5 Hz tolerance
 if (Math.abs(detectedHz - targetHz) <= tol) {
   this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
 } else {
