@@ -506,10 +506,10 @@ class BinauralBeatGenerator {
 
 // ─── Helpers (place these above your class) ────────────────────────────
 
-/**  
- * Estimate the dominant pure-tone frequency via offline FFT.  
- * @param {AudioBuffer} buffer  
- * @returns {Promise<number>} peak frequency in Hz  
+/**
+ * Estimate the dominant pure-tone frequency via offline FFT.
+ * @param {AudioBuffer} buffer
+ * @returns {Promise<number>} peak frequency in Hz
  */
 async function detectMonoFrequency(buffer) {
   const offlineCtx = new OfflineAudioContext(1, buffer.length, buffer.sampleRate);
@@ -521,9 +521,10 @@ async function detectMonoFrequency(buffer) {
   analyser.connect(offlineCtx.destination);
   src.start();
   await offlineCtx.startRendering();
+
   const data = new Float32Array(analyser.frequencyBinCount);
   analyser.getFloatFrequencyData(data);
-  // Find max bin
+
   let maxVal = -Infinity, maxIdx = 0;
   for (let i = 0; i < data.length; i++) {
     if (data[i] > maxVal) {
@@ -534,34 +535,37 @@ async function detectMonoFrequency(buffer) {
   return maxIdx * offlineCtx.sampleRate / analyser.fftSize;
 }
 
-/**  
- * Estimate the binaural beat frequency by envelope detection.  
- * @param {AudioBuffer} buffer  
- * @returns {number} beat frequency in Hz  
+/**
+ * Detect the binaural beat frequency by envelope detection.
+ * @param {AudioBuffer} buffer
+ * @param {number}      targetHz  The expected beat frequency
+ * @returns {number}    Estimated beat frequency in Hz
  */
-function detectBeatFrequency(buffer) {
+function detectBeatFrequency(buffer, targetHz) {
   const fs   = buffer.sampleRate;
   const len  = buffer.length;
   const ch   = buffer.numberOfChannels;
   const mono = new Float32Array(len);
-  // Mix to mono
+
+  // 1) Mix to mono
   for (let c = 0; c < ch; c++) {
     const d = buffer.getChannelData(c);
     for (let i = 0; i < len; i++) {
       mono[i] += d[i] / ch;
     }
   }
-  // Full-wave rectify
+  // 2) Full-wave rectify to get envelope
   for (let i = 0; i < len; i++) {
     mono[i] = Math.abs(mono[i]);
   }
-  // Downsample envelope (~200 samples/sec)
-  const step = Math.max(1, Math.floor(fs / 200));
-  const env  = [];
+  // 3) Adaptive down-sampling: ≥10 samples per cycle
+  const samplesPerCycle = fs / Math.max(targetHz, 0.1);
+  const step            = Math.max(1, Math.floor(samplesPerCycle / 10));
+  const env             = [];
   for (let i = 0; i < len; i += step) {
     env.push(mono[i]);
   }
-  // Peak detection
+  // 4) Peak detection on envelope
   const peaks = [];
   for (let i = 1; i < env.length - 1; i++) {
     if (env[i] > env[i-1] && env[i] > env[i+1] && env[i] > 0.01) {
@@ -569,7 +573,7 @@ function detectBeatFrequency(buffer) {
     }
   }
   if (peaks.length < 2) return 0;
-  // Average period
+  // 5) Average period between peaks (in seconds)
   let sum = 0;
   for (let i = 1; i < peaks.length; i++) {
     sum += (peaks[i] - peaks[i-1]) * step;
@@ -578,7 +582,7 @@ function detectBeatFrequency(buffer) {
   return 1 / avgPeriod;
 }
 
-// ─── In your play() method, after creating the MediaRecorder, replace onstop with: ─────────────────
+// ─── In your play() method, replace the onstop handler with this ─────────────────
 
 this.mediaRecorder.onstop = async () => {
   // 1) Download link
@@ -594,18 +598,21 @@ this.mediaRecorder.onstop = async () => {
   const audioCtx    = new AudioContext();
   const audioBuf    = await audioCtx.decodeAudioData(arrayBuffer);
 
-  // 3) Detect frequency
+  // 3) Determine target frequency
+  const targetHz = this.mode === 'binaural'
+    ? this.beatFrequency
+    : this.monoFrequency;
+
+  // 4) Detect frequency
   let detectedHz;
   if (this.mode === 'binaural') {
-    detectedHz = detectBeatFrequency(audioBuf);
+    detectedHz = detectBeatFrequency(audioBuf, targetHz);
   } else {
     detectedHz = await detectMonoFrequency(audioBuf);
   }
 
-  // 4) Compare & update status
-  const targetHz = this.mode === 'binaural' ? this.beatFrequency : this.monoFrequency;
-  const tol      = 2; // ±0.5 Hz
-
+  // 5) Compare & update status (±2 Hz tolerance)
+  const tol = 2.0;
   if (Math.abs(detectedHz - targetHz) <= tol) {
     this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
   } else {
