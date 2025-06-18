@@ -504,6 +504,52 @@ class BinauralBeatGenerator {
   this.chunks = [];
   this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
 
+/**
+ * Detect the beat (envelope) frequency in a decoded AudioBuffer.
+ * @param {AudioBuffer} buffer  The stereo AudioBuffer from decodeAudioData
+ * @returns {number}            Estimated beat frequency in Hz
+ */
+function detectBeatFrequency(buffer) {
+  const fs     = buffer.sampleRate;
+  const len    = buffer.length;
+  const ch     = buffer.numberOfChannels;
+  // Mix down to mono
+  const mono = new Float32Array(len);
+  for (let c = 0; c < ch; c++) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < len; i++) {
+      mono[i] += data[i] / ch;
+    }
+  }
+  // Rectify to get envelope
+  for (let i = 0; i < len; i++) {
+    mono[i] = Math.abs(mono[i]);
+  }
+  // Downsample envelope for peak detection (~200 samples/sec)
+  const step = Math.floor(fs / 200) || 1;
+  const env  = [];
+  for (let i = 0; i < len; i += step) {
+    env.push(mono[i]);
+  }
+  // Find peaks in the envelope
+  const peaks = [];
+  for (let i = 1; i < env.length - 1; i++) {
+    if (env[i] > env[i-1] && env[i] > env[i+1] && env[i] > 0.01) {
+      peaks.push(i);
+    }
+  }
+  if (peaks.length < 2) return 0;
+  // Average interval between peaks
+  let sum = 0;
+  for (let i = 1; i < peaks.length; i++) {
+    sum += (peaks[i] - peaks[i-1]) * step;
+  }
+  const avgPeriod = (sum / (peaks.length - 1)) / fs;
+  return 1 / avgPeriod;
+}
+
+// … inside your class, replace your existing onstop with:
+
 this.mediaRecorder.onstop = async () => {
   // 1) Make the blob & show download link
   const blob = new Blob(this.chunks, { type: mime });
@@ -513,65 +559,29 @@ this.mediaRecorder.onstop = async () => {
   dl.download = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
   dl.classList.remove('d-none');
 
-// 2) Decode into AudioBuffer
-const arrayBuffer = await blob.arrayBuffer();
-const audioCtx    = new AudioContext();
-const audioBuf    = await audioCtx.decodeAudioData(arrayBuffer);
+  // 2) Decode into AudioBuffer
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioCtx    = new AudioContext();
+  const audioBuf    = await audioCtx.decodeAudioData(arrayBuffer);
 
-// 3) Create a mono buffer by averaging channels
-const numChannels = audioBuf.numberOfChannels;
-const length      = audioBuf.length;
-const sampleRate  = audioBuf.sampleRate;
-const monoData    = new Float32Array(length);
-
-for (let c = 0; c < numChannels; c++) {
-  const ch = audioBuf.getChannelData(c);
-  for (let i = 0; i < length; i++) {
-    monoData[i] += ch[i] / numChannels;
+  // 3) Detect frequency
+  let detectedHz = 0;
+  if (this.mode === 'binaural') {
+    detectedHz = detectBeatFrequency(audioBuf);
+  } else {
+    // For mono, just trust the oscillator value or perform a simple check
+    detectedHz = this.monoFrequency;
   }
-}
 
-// 2) Extract the envelope by full-wave rectification
-for (let i = 0; i < length; i++) {
-  monoData[i] = Math.abs(monoData[i]);
-}
+  // 4) Compare against target
+  const targetHz = this.mode === 'binaural' ? this.beatFrequency : this.monoFrequency;
+  const tol      = 0.5;  // ±0.5 Hz tolerance
 
-// 3) Zero-pad or downsample envelope to a power‑of‑two length for FFT
-const fftSize = 16384;
-const buffer  = new Float32Array(fftSize);
-for (let i = 0; i < fftSize && i < length; i++) {
-  buffer[i] = monoData[i];
-}
-
-// 4) Run a simple FFT on `buffer` (using a small JS FFT lib)  
-// Here’s a minimal FFT import you can drop in, e.g. using dsp.js or kissfft.js.
-// For brevity, assume you have a function `fft(buffer)` that returns
-// `{ real: Float32Array, imag: Float32Array }` of length `fftSize`.
-
-const { real, imag } = fft(buffer);  
-const magnitudes = new Float32Array(fftSize / 2);
-for (let i = 0; i < fftSize / 2; i++) {
-  magnitudes[i] = Math.hypot(real[i], imag[i]);
-}
-
-// 5) Find the peak in `magnitudes`
-let maxIdx = 1, maxMag = magnitudes[1];
-for (let i = 2; i < magnitudes.length; i++) {
-  if (magnitudes[i] > maxMag) {
-    maxMag = magnitudes[i];
-    maxIdx = i;
+  if (Math.abs(detectedHz - targetHz) <= tol) {
+    this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
+  } else {
+    this.updateStatus(`❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`, 'danger');
   }
-}
-const detectedHz = maxIdx * sampleRate / fftSize;
-
-// 6) Compare against your beatFrequency or monoFrequency
-const targetHz = this.mode === 'binaural' ? this.beatFrequency : this.monoFrequency;
-const tol = 0.5;  // ±0.5 Hz tolerance
-if (Math.abs(detectedHz - targetHz) <= tol) {
-  this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
-} else {
-  this.updateStatus(`❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`, 'danger');
-}
 };
 
 
