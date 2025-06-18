@@ -504,34 +504,64 @@ class BinauralBeatGenerator {
   this.chunks = [];
   this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
 
-/**
- * Detect the beat (envelope) frequency in a decoded AudioBuffer.
- * @param {AudioBuffer} buffer  The stereo AudioBuffer from decodeAudioData
- * @returns {number}            Estimated beat frequency in Hz
+// ─── Helpers (place these above your class) ────────────────────────────
+
+/**  
+ * Estimate the dominant pure-tone frequency via offline FFT.  
+ * @param {AudioBuffer} buffer  
+ * @returns {Promise<number>} peak frequency in Hz  
  */
-function detectBeatFrequency(buffer) {
-  const fs     = buffer.sampleRate;
-  const len    = buffer.length;
-  const ch     = buffer.numberOfChannels;
-  // Mix down to mono
-  const mono = new Float32Array(len);
-  for (let c = 0; c < ch; c++) {
-    const data = buffer.getChannelData(c);
-    for (let i = 0; i < len; i++) {
-      mono[i] += data[i] / ch;
+async function detectMonoFrequency(buffer) {
+  const offlineCtx = new OfflineAudioContext(1, buffer.length, buffer.sampleRate);
+  const src        = offlineCtx.createBufferSource();
+  src.buffer       = buffer;
+  const analyser   = offlineCtx.createAnalyser();
+  analyser.fftSize = 16384;
+  src.connect(analyser);
+  analyser.connect(offlineCtx.destination);
+  src.start();
+  await offlineCtx.startRendering();
+  const data = new Float32Array(analyser.frequencyBinCount);
+  analyser.getFloatFrequencyData(data);
+  // Find max bin
+  let maxVal = -Infinity, maxIdx = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] > maxVal) {
+      maxVal = data[i];
+      maxIdx = i;
     }
   }
-  // Rectify to get envelope
+  return maxIdx * offlineCtx.sampleRate / analyser.fftSize;
+}
+
+/**  
+ * Estimate the binaural beat frequency by envelope detection.  
+ * @param {AudioBuffer} buffer  
+ * @returns {number} beat frequency in Hz  
+ */
+function detectBeatFrequency(buffer) {
+  const fs   = buffer.sampleRate;
+  const len  = buffer.length;
+  const ch   = buffer.numberOfChannels;
+  const mono = new Float32Array(len);
+  // Mix to mono
+  for (let c = 0; c < ch; c++) {
+    const d = buffer.getChannelData(c);
+    for (let i = 0; i < len; i++) {
+      mono[i] += d[i] / ch;
+    }
+  }
+  // Full-wave rectify
   for (let i = 0; i < len; i++) {
     mono[i] = Math.abs(mono[i]);
   }
-  // Downsample envelope for peak detection (~200 samples/sec)
-  const step = Math.floor(fs / 200) || 1;
+  // Downsample envelope (~200 samples/sec)
+  const step = Math.max(1, Math.floor(fs / 200));
   const env  = [];
   for (let i = 0; i < len; i += step) {
     env.push(mono[i]);
   }
-  // Find peaks in the envelope
+  // Peak detection
   const peaks = [];
   for (let i = 1; i < env.length - 1; i++) {
     if (env[i] > env[i-1] && env[i] > env[i+1] && env[i] > 0.01) {
@@ -539,7 +569,7 @@ function detectBeatFrequency(buffer) {
     }
   }
   if (peaks.length < 2) return 0;
-  // Average interval between peaks
+  // Average period
   let sum = 0;
   for (let i = 1; i < peaks.length; i++) {
     sum += (peaks[i] - peaks[i-1]) * step;
@@ -548,10 +578,10 @@ function detectBeatFrequency(buffer) {
   return 1 / avgPeriod;
 }
 
-// … inside your class, replace your existing onstop with:
+// ─── In your play() method, after creating the MediaRecorder, replace onstop with: ─────────────────
 
 this.mediaRecorder.onstop = async () => {
-  // 1) Make the blob & show download link
+  // 1) Download link
   const blob = new Blob(this.chunks, { type: mime });
   const url  = URL.createObjectURL(blob);
   const dl   = document.getElementById('downloadLink');
@@ -559,30 +589,33 @@ this.mediaRecorder.onstop = async () => {
   dl.download = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
   dl.classList.remove('d-none');
 
-  // 2) Decode into AudioBuffer
+  // 2) Decode audio
   const arrayBuffer = await blob.arrayBuffer();
   const audioCtx    = new AudioContext();
   const audioBuf    = await audioCtx.decodeAudioData(arrayBuffer);
 
   // 3) Detect frequency
-  let detectedHz = 0;
+  let detectedHz;
   if (this.mode === 'binaural') {
     detectedHz = detectBeatFrequency(audioBuf);
   } else {
-    // For mono, just trust the oscillator value or perform a simple check
-    detectedHz = this.monoFrequency;
+    detectedHz = await detectMonoFrequency(audioBuf);
   }
 
-  // 4) Compare against target
+  // 4) Compare & update status
   const targetHz = this.mode === 'binaural' ? this.beatFrequency : this.monoFrequency;
-  const tol      = 0.5;  // ±0.5 Hz tolerance
+  const tol      = 0.5; // ±0.5 Hz
 
   if (Math.abs(detectedHz - targetHz) <= tol) {
     this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
   } else {
-    this.updateStatus(`❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`, 'danger');
+    this.updateStatus(
+      `❌ Frequency off: ${detectedHz.toFixed(1)} Hz (expected ${targetHz} Hz)`,
+      'danger'
+    );
   }
 };
+
 
 
   this.mediaRecorder.start();
