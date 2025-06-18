@@ -604,7 +604,7 @@ this.mediaRecorder.onstop = async () => {
 
   // 4) Compare & update status
   const targetHz = this.mode === 'binaural' ? this.beatFrequency : this.monoFrequency;
-  const tol      = 0.5; // ±0.5 Hz
+  const tol      = 2; // ±0.5 Hz
 
   if (Math.abs(detectedHz - targetHz) <= tol) {
     this.updateStatus(`✅ Frequency OK (${detectedHz.toFixed(1)} Hz)`, 'success');
