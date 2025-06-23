@@ -24,7 +24,7 @@ class BinauralBeatGenerator {
         this.setupEventListeners();
         this.checkBrowserSupport();
     }
-async playPowerNap(upperFreq, lowerFreq, duration) {
+/*async playPowerNap(upperFreq, lowerFreq, duration) {
     // ensure audioContext is ready
     if (!this.audioContext) await this.initializeAudioContext();
 
@@ -145,13 +145,13 @@ async playPowerNap(upperFreq, lowerFreq, duration) {
         this.binauralModeBtn.addEventListener('change', () => this.switchMode('binaural'));
         this.monoModeBtn.addEventListener('change', () => this.switchMode('mono'));
         
-document.getElementById('powerNapBtn').addEventListener('click', () => {
+/*document.getElementById('powerNapBtn').addEventListener('click', () => {
   const upper    = parseFloat(document.getElementById('napUpper').value);
   const lower    = parseFloat(document.getElementById('napLower').value);
   const duration = parseFloat(document.getElementById('napDuration').value);
   this.playPowerNap(upper, lower, duration);
 });
-
+*/
         // Beat frequency slider
         this.beatFrequencySlider.addEventListener('input', (e) => {
             this.beatFrequency = parseFloat(e.target.value);
