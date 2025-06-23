@@ -24,6 +24,62 @@ class BinauralBeatGenerator {
         this.setupEventListeners();
         this.checkBrowserSupport();
     }
+async playPowerNap(upperFreq, lowerFreq, duration) {
+    // ensure audioContext is ready
+    if (!this.audioContext) await this.initializeAudioContext();
+
+    // kill any existing oscillators
+    this.stop();
+
+    // create a single oscillator
+    const osc = this.audioContext.createOscillator();
+    osc.type = 'sine';
+
+    // connect through masterGain to speakers
+    osc.connect(this.masterGain);
+    this.masterGain.connect(this.audioContext.destination);
+
+    // compute times
+    const now           = this.audioContext.currentTime;
+    const rampTime      = duration * 0.15;
+    const holdTime      = duration * 0.70;
+    const downStart     = now;
+    const downEnd       = now + rampTime;
+    const holdEnd       = downEnd + holdTime;
+    const upEnd         = holdEnd + rampTime;
+
+    // schedule frequency ramp down
+    osc.frequency.setValueAtTime(upperFreq,           downStart);
+    osc.frequency.linearRampToValueAtTime(lowerFreq,  downEnd);
+
+    // hold lowerFreq
+    osc.frequency.setValueAtTime(lowerFreq,            downEnd);
+    osc.frequency.setValueAtTime(lowerFreq,            holdEnd);
+
+    // schedule ramp up
+    osc.frequency.linearRampToValueAtTime(upperFreq,   upEnd);
+
+    // start & stop
+    osc.start(now);
+    osc.stop(upEnd);
+
+    // update UI status
+    this.updateStatus(`🛌 Power Nap: ${duration}s sweep`, 'info');
+    // keep reference if you need to stop early
+    this.powerNapOscillator = osc;
+  }
+
+ /* // Optionally override stop() to kill powerNapOscillator too
+  stop() {
+    // existing stop logic…
+    if (this.powerNapOscillator) {
+      try { this.powerNapOscillator.stop(); } catch {}
+      this.powerNapOscillator.disconnect();
+      this.powerNapOscillator = null;
+    }
+    // … rest of stop() …
+  */
+  }
 
     initializeElements() {
         // Control elements
@@ -88,6 +144,13 @@ class BinauralBeatGenerator {
         // Mode selection
         this.binauralModeBtn.addEventListener('change', () => this.switchMode('binaural'));
         this.monoModeBtn.addEventListener('change', () => this.switchMode('mono'));
+        
+document.getElementById('powerNapBtn').addEventListener('click', () => {
+  const upper    = parseFloat(document.getElementById('napUpper').value);
+  const lower    = parseFloat(document.getElementById('napLower').value);
+  const duration = parseFloat(document.getElementById('napDuration').value);
+  this.playPowerNap(upper, lower, duration);
+});
 
         // Beat frequency slider
         this.beatFrequencySlider.addEventListener('input', (e) => {
