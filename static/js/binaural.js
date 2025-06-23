@@ -1,5 +1,5 @@
 
-async function estimateFrequency(buffer) {
+/*async function estimateFrequency(buffer) {
   // Create an offline context to render the buffer
   const offlineCtx = new OfflineAudioContext(
     1, buffer.length, buffer.sampleRate
@@ -32,7 +32,7 @@ async function estimateFrequency(buffer) {
   // Convert bin index to actual Hz
   return maxIdx * offlineCtx.sampleRate / analyser.fftSize;
 }
-
+*/
 class BinauralBeatGenerator {
     constructor() {
         this.audioContext = null;
