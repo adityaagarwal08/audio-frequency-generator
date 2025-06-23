@@ -1,38 +1,3 @@
-
-/*async function estimateFrequency(buffer) {
-  // Create an offline context to render the buffer
-  const offlineCtx = new OfflineAudioContext(
-    1, buffer.length, buffer.sampleRate
-  );
-  const source = offlineCtx.createBufferSource();
-  source.buffer = buffer;
-
-  // Analyser for frequency data
-  const analyser = offlineCtx.createAnalyser();
-  analyser.fftSize = 2048;
-
-  source.connect(analyser);
-  analyser.connect(offlineCtx.destination);
-  source.start();
-
-  // Render and then grab frequency data
-  await offlineCtx.startRendering();
-  const data = new Float32Array(analyser.frequencyBinCount);
-  analyser.getFloatFrequencyData(data);
-
-  // Find the index of the highest magnitude bin
-  let maxVal = -Infinity, maxIdx = 0;
-  for (let i = 0; i < data.length; i++) {
-    if (data[i] > maxVal) {
-      maxVal = data[i];
-      maxIdx = i;
-    }
-  }
-
-  // Convert bin index to actual Hz
-  return maxIdx * offlineCtx.sampleRate / analyser.fftSize;
-}
-*/
 class BinauralBeatGenerator {
     constructor() {
         this.audioContext = null;
