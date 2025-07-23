@@ -1,38 +1,4 @@
 
-/*async function estimateFrequency(buffer) {
-  // Create an offline context to render the buffer
-  const offlineCtx = new OfflineAudioContext(
-    1, buffer.length, buffer.sampleRate
-  );
-  const source = offlineCtx.createBufferSource();
-  source.buffer = buffer;
-
-  // Analyser for frequency data
-  const analyser = offlineCtx.createAnalyser();
-  analyser.fftSize = 2048;
-
-  source.connect(analyser);
-  analyser.connect(offlineCtx.destination);
-  source.start();
-
-  // Render and then grab frequency data
-  await offlineCtx.startRendering();
-  const data = new Float32Array(analyser.frequencyBinCount);
-  analyser.getFloatFrequencyData(data);
-
-  // Find the index of the highest magnitude bin
-  let maxVal = -Infinity, maxIdx = 0;
-  for (let i = 0; i < data.length; i++) {
-    if (data[i] > maxVal) {
-      maxVal = data[i];
-      maxIdx = i;
-    }
-  }
-
-  // Convert bin index to actual Hz
-  return maxIdx * offlineCtx.sampleRate / analyser.fftSize;
-}
-*/
 class BinauralBeatGenerator {
     constructor() {
         this.audioContext = null;
@@ -75,6 +41,10 @@ class BinauralBeatGenerator {
         this.playBtn = document.getElementById('playBtn');
         this.pauseBtn = document.getElementById('pauseBtn');
         this.stopBtn = document.getElementById('stopBtn');
+this.napDurationInput = document.getElementById('napDuration');
+this.napUpperInput    = document.getElementById('napUpper');
+this.napLowerInput    = document.getElementById('napLower');
+this.powerNapBtn      = document.getElementById('powerNapBtn');
 
         // Mode selection
         this.binauralModeBtn = document.getElementById('binauralMode');
@@ -123,6 +93,12 @@ class BinauralBeatGenerator {
         // Mode selection
         this.binauralModeBtn.addEventListener('change', () => this.switchMode('binaural'));
         this.monoModeBtn.addEventListener('change', () => this.switchMode('mono'));
+this.powerNapBtn.addEventListener('click', () => {
+  const duration   = parseFloat(this.napDurationInput.value);
+  const upperFreq  = parseFloat(this.napUpperInput.value);
+  const lowerFreq  = parseFloat(this.napLowerInput.value);
+  this.playPowerNap(upperFreq, lowerFreq, duration);
+});
 
         // Beat frequency slider
         this.beatFrequencySlider.addEventListener('input', (e) => {
@@ -459,6 +435,36 @@ class BinauralBeatGenerator {
             }
         }
     }
+async playPowerNap(upperFreq, lowerFreq, duration) {
+  if (!this.audioContext) await this.initializeAudioContext();
+  if (this.audioContext.state === 'suspended') await this.audioContext.resume();
+
+  this.stop(); // Stops any running tone
+
+  const osc = this.audioContext.createOscillator();
+  osc.type = 'sine';
+  osc.connect(this.masterGain);
+  this.masterGain.connect(this.audioContext.destination);
+
+  const now    = this.audioContext.currentTime;
+  const ramp   = duration * 0.15;
+  const hold   = duration * 0.70;
+  const t1     = now + ramp;
+  const t2     = t1 + hold;
+  const t3     = t2 + ramp;
+
+  osc.frequency.setValueAtTime(upperFreq, now);
+  osc.frequency.linearRampToValueAtTime(lowerFreq, t1);
+  osc.frequency.setValueAtTime(lowerFreq, t1);
+  osc.frequency.setValueAtTime(lowerFreq, t2);
+  osc.frequency.linearRampToValueAtTime(upperFreq, t3);
+
+  osc.start(now);
+  osc.stop(t3);
+
+  this.powerNapOscillator = osc;
+  this.updateStatus(`🛌 Power Nap started for ${duration}s`, 'info');
+}
 
     async play() {
         try {
@@ -724,6 +730,7 @@ this.mediaRecorder.onstop = async () => {
                 this.musicSource.disconnect();
                 this.musicSource = null;
             }
+
 // Stop media recorder if recording
 if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
     this.mediaRecorder.stop();
