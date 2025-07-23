@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binaural Beat Generator</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8 col-xl-6">
+                <div class="card shadow-lg">
+                    <div class="card-header text-center">
+                        <h1 class="h3 mb-0">
+                            <i class="fas fa-wave-square me-2"></i>
+                            Audio Frequency Generator
+                        </h1>
+                        <p class="text-muted mb-0 mt-2">Generate binaural beats and monochromatic tones for relaxation and focus</p>
+                    </div>
+                    <div class="card-body">
+                        <!-- Browser Support Warning -->
+                        <div id="browserWarning" class="alert alert-warning d-none" role="alert">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Your browser doesn't support the Web Audio API. Please use a modern browser like Chrome, Firefox, or Safari.
+                        </div>
+                        
+                        <!-- Frequency Display -->
+                        <div class="row mb-4">
+                            <div class="col-6">
+                                <div class="card bg-secondary">
+                                    <div class="card-body text-center py-3">
+                                        <h5 class="card-title mb-1">Left Ear</h5>
+                                        <h3 class="text-primary mb-0">300 Hz</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="card bg-secondary">
+                                    <div class="card-body text-center py-3">
+                                        <h5 class="card-title mb-1">Right Ear</h5>
+                                        <h3 class="text-info mb-0" id="rightFreqDisplay">300 Hz</h3>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Mode Selection -->
+                        <div class="mb-4">
+                            <label class="form-label">
+                                <i class="fas fa-cog me-2"></i>Generation Mode
+                            </label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="mode" id="binauralMode" checked>
+                                <label class="btn btn-outline-primary" for="binauralMode">Binaural Beats</label>
+                                
+                                <input type="radio" class="btn-check" name="mode" id="monoMode">
+                                <label class="btn btn-outline-primary" for="monoMode">Monochromatic</label>
+                            </div>
+                        </div>
+
+                        <!-- Beat Frequency Display -->
+                        <div class="text-center mb-4" id="beatFreqSection">
+                            <div class="card bg-dark">
+                                <div class="card-body py-3">
+                                    <h5 class="card-title mb-1">Beat Frequency</h5>
+                                    <h2 class="text-warning mb-0" id="beatFreqDisplay">0 Hz</h2>
+                                    <small class="text-muted" id="beatTypeDisplay">No Beat</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Monochromatic Frequency Display -->
+                        <div class="text-center mb-4" id="monoFreqSection" style="display: none;">
+                            <div class="card bg-dark">
+                                <div class="card-body py-3">
+                                    <h5 class="card-title mb-1">Frequency</h5>
+                                    <h2 class="text-success mb-0" id="monoFreqDisplay">440 Hz</h2>
+                                    <small class="text-muted">Monochromatic Tone</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Beat Frequency Control -->
+                        <div class="mb-4" id="beatFreqControl">
+                            <label for="beatFrequency" class="form-label">
+                                <i class="fas fa-sliders-h me-2"></i>Beat Frequency (0-50 Hz)
+                            </label>
+                            <input type="range" class="form-range" id="beatFrequency" 
+                                   min="0" max="50" value="0" step="0.1">
+                            <div class="d-flex justify-content-between text-muted small mt-1">
+                                <span>0 Hz</span>
+                                <span>25 Hz</span>
+                                <span>50 Hz</span>
+                            </div>
+                            <div class="mt-2">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label for="beatFreqInput" class="form-label small">Enter exact frequency:</label>
+                                        <input type="number" class="form-control form-control-sm" id="beatFreqInput" 
+                                               min="0" max="50" step="0.1" value="0" placeholder="0.0">
+                                    </div>
+                                    <div class="col-6 d-flex align-items-end">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" id="setBeatFreq">Set</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Monochromatic Frequency Control -->
+                        <div class="mb-4" id="monoFreqControl" style="display: none;">
+                            <label for="monoFrequency" class="form-label">
+                                <i class="fas fa-sliders-h me-2"></i>Frequency (20-20000 Hz)
+                            </label>
+                            <input type="range" class="form-range" id="monoFrequency" 
+                                   min="20" max="20000" value="440" step="1">
+                            <div class="d-flex justify-content-between text-muted small mt-1">
+                                <span>20 Hz</span>
+                                <span>440 Hz (A4)</span>
+                                <span>20 kHz</span>
+                            </div>
+                            <div class="mt-2">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-6">
+                                        <label for="monoFreqInput" class="form-label small">Enter exact frequency:</label>
+                                        <input type="number" class="form-control form-control-sm" id="monoFreqInput" 
+                                               min="20" max="20000" step="1" value="440" placeholder="440">
+                                    </div>
+                                    <div class="col-6 d-flex align-items-end">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" id="setMonoFreq">Set</button>
+                                    </div>
+                                </div>
+                                <small class="text-muted">Common frequencies: 
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-1" data-freq="440">A4 (440Hz)</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-1" data-freq="528">528Hz</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-1" data-freq="432">432Hz</button>
+                                </small>
+                            </div>
+                        </div>
+
+
+
+                        <!-- Music Upload -->
+                        <div class="mb-4">
+                            <label for="musicFile" class="form-label">
+                                <i class="fas fa-music me-2"></i>Background Music (Optional)
+                            </label>
+                            <input type="file" class="form-control" id="musicFile" 
+                                   accept="audio/*" aria-describedby="musicHelp">
+                            <div id="musicHelp" class="form-text">
+                                Upload an audio file to mix with binaural beats. Supports MP3, WAV, OGG formats.
+                            </div>
+                            <div class="mt-2">
+                                <button id="clearMusic" class="btn btn-outline-secondary btn-sm d-none">
+                                    <i class="fas fa-times me-1"></i>Clear Music
+                                </button>
+                                <span id="musicStatus" class="badge bg-secondary ms-2 d-none"></span>
+                            </div>
+                        </div>
+
+                        <!-- Volume Controls -->
+                        <div class="mb-4">
+                            <label for="binauralVolume" class="form-label">
+                                <i class="fas fa-wave-square me-2"></i>Binaural Beats Volume
+                            </label>
+                            <input type="range" class="form-range" id="binauralVolume" 
+                                   min="0" max="1" value="0.5" step="0.01">
+                            <div class="d-flex justify-content-between text-muted small mt-1">
+                                <span>0%</span>
+                                <span>50%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+
+                        <div class="mb-4" id="musicVolumeControl" style="display: none;">
+                            <label for="musicVolume" class="form-label">
+                                <i class="fas fa-music me-2"></i>Music Volume
+                            </label>
+                            <input type="range" class="form-range" id="musicVolume" 
+                                   min="0" max="1" value="0.3" step="0.01">
+                            <div class="d-flex justify-content-between text-muted small mt-1">
+                                <span>0%</span>
+                                <span>30%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+
+                        <!-- Playback Controls -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                            <button id="playBtn" class="btn btn-success btn-lg me-md-2" disabled>
+                                <i class="fas fa-play me-2"></i>Play
+                            </button>
+                            <button id="pauseBtn" class="btn btn-warning btn-lg me-md-2" disabled>
+                                <i class="fas fa-pause me-2"></i>Pause
+                            </button>
+                            <button id="stopBtn" class="btn btn-secondary btn-lg" disabled>
+                                <i class="fas fa-stop me-2"></i>Stop
+                            </button>
+                        </div>
+
+                        <!-- Status Display -->
+                        <div class="text-center mt-4">
+                            <span id="statusDisplay" class="badge bg-secondary fs-6">Ready to play</span>
+                        </div>
+
+
+                        <!-- Download Link (hidden until ready) -->
+                            <div class="text-center mt-3">
+                              <a
+                                id="downloadLink"
+                                href="#"
+                                download="result.mp3"
+                                class="btn btn-success d-none"
+                              >
+                                 Download Result
+                              </a>
+                            </div>
+
+                        
+                        <!-- Information Section -->
+                        <div class="mt-5">
+                            <h5 class="mb-3">
+                                <i class="fas fa-info-circle me-2"></i>About Binaural Beats
+                            </h5>
+                            <div class="accordion" id="infoAccordion">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" 
+                                                data-bs-toggle="collapse" data-bs-target="#collapseFrequencies">
+                                            Frequency Ranges
+                                        </button>
+                                    </h2>
+                                    <div id="collapseFrequencies" class="accordion-collapse collapse" 
+                                         data-bs-parent="#infoAccordion">
+                                        <div class="accordion-body">
+                                            <ul class="list-unstyled">
+                                                <li><strong>Delta (0.5-4 Hz):</strong> Deep sleep, healing</li>
+                                                <li><strong>Theta (4-8 Hz):</strong> Meditation, creativity</li>
+                                                <li><strong>Alpha (8-13 Hz):</strong> Relaxation, calm focus</li>
+                                                <li><strong>Beta (13-30 Hz):</strong> Active concentration</li>
+                                                <li><strong>Gamma (30+ Hz):</strong> High-level cognitive processing</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/binaural.js') }}"></script>
+</body>
+</html>
