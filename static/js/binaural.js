@@ -45,6 +45,8 @@ this.napDurationInput = document.getElementById('napDuration');
 this.napUpperInput    = document.getElementById('napUpper');
 this.napLowerInput    = document.getElementById('napLower');
 this.powerNapBtn      = document.getElementById('powerNapBtn');
+this.stopNapBtn = document.getElementById('stopNapBtn');
+this.downloadNapBtn = document.getElementById('downloadNapBtn');
 
         // Mode selection
         this.binauralModeBtn = document.getElementById('binauralMode');
@@ -98,6 +100,8 @@ this.powerNapBtn.addEventListener('click', () => {
   const upperFreq  = parseFloat(this.napUpperInput.value);
   const lowerFreq  = parseFloat(this.napLowerInput.value);
   this.playPowerNap(upperFreq, lowerFreq, duration);
+  this.stopNapBtn.addEventListener('click', () => this.stopNap());
+
 });
 
         // Beat frequency slider
@@ -439,6 +443,7 @@ async playPowerNap(upperFreq, lowerFreq, duration) {
   if (!this.audioContext) await this.initializeAudioContext();
   if (this.audioContext.state === 'suspended') await this.audioContext.resume();
 
+this.mode = 'powernap';
   this.stop(); // Stops any running tone
 
   const osc = this.audioContext.createOscillator();
@@ -464,6 +469,12 @@ async playPowerNap(upperFreq, lowerFreq, duration) {
 
   this.powerNapOscillator = osc;
   this.updateStatus(`🛌 Power Nap started for ${duration}s`, 'info');
+}
+stopNap() {
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.stop();  // Triggers onstop
+    }
+    this.stop(); // Also stop oscillators/music
 }
 
     async play() {
@@ -596,7 +607,12 @@ this.mediaRecorder.onstop = async () => {
   const url  = URL.createObjectURL(blob);
   const dl   = document.getElementById('downloadLink');
   dl.href     = url;
-  dl.download = `${this.mode === 'binaural' ? 'binaural_mix' : 'pure_tone'}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
+  dl.download = `${
+  this.mode === 'binaural' ? 'binaural_mix' :
+  this.mode === 'mono' ? 'pure_tone' :
+  this.mode === 'powernap' ? 'powernap_session' : 'audio'
+}.${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}`;
+
   dl.classList.remove('d-none');
 
   // 2) Decode audio
