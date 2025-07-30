@@ -96,13 +96,13 @@ this.downloadNapBtn = document.getElementById('downloadNapBtn');
         this.binauralModeBtn.addEventListener('change', () => this.switchMode('binaural'));
         this.monoModeBtn.addEventListener('change', () => this.switchMode('mono'));
 this.powerNapBtn.addEventListener('click', () => {
-  const duration   = parseFloat(this.napDurationInput.value);
-  const upperFreq  = parseFloat(this.napUpperInput.value);
-  const lowerFreq  = parseFloat(this.napLowerInput.value);
-  this.playPowerNap(upperFreq, lowerFreq, duration);
-  this.stopNapBtn.addEventListener('click', () => this.stopNap());
-
+  const duration = parseFloat(this.napDurationInput.value);
+  const upper    = parseFloat(this.napUpperInput.value);
+  const lower    = parseFloat(this.napLowerInput.value);
+  this.playPowerNap(upper, lower, duration);
 });
+this.stopNapBtn.addEventListener('click', () => this.stopNap());
+
 
         // Beat frequency slider
         this.beatFrequencySlider.addEventListener('input', (e) => {
