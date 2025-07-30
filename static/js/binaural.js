@@ -443,24 +443,34 @@ async playPowerNap(upperFreq, lowerFreq, duration) {
   if (!this.audioContext) await this.initializeAudioContext();
   if (this.audioContext.state === 'suspended') await this.audioContext.resume();
 
-this.mode = 'powernap';
-  this.stop(); // Stops any running tone
+  this.mode = 'powernap';
+  this.stop();               // stop any existing audio
+  this.downloadNapBtn.classList.add('d-none');
+  this.chunks = [];
 
+  // set up recording
+  const destination = this.audioContext.createMediaStreamDestination();
+  this.masterGain.connect(destination);
+  const mime = MediaRecorder.isTypeSupported('audio/mp4') 
+    ? 'audio/mp4' : 'audio/webm';
+  this.mediaRecorder = new MediaRecorder(destination.stream, { mimeType: mime });
+  this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
+  this.mediaRecorder.onstop = () => this._handleNapRecordingStop(mime);
+  this.mediaRecorder.start();
+
+  // set up and schedule the sweep oscillator
   const osc = this.audioContext.createOscillator();
   osc.type = 'sine';
   osc.connect(this.masterGain);
   this.masterGain.connect(this.audioContext.destination);
 
-  const now    = this.audioContext.currentTime;
-  const ramp   = duration * 0.15;
-  const hold   = duration * 0.70;
-  const t1     = now + ramp;
-  const t2     = t1 + hold;
-  const t3     = t2 + ramp;
+  const now  = this.audioContext.currentTime;
+  const ramp = duration * 0.15;
+  const hold = duration * 0.70;
+  const t1   = now + ramp, t2 = t1 + hold, t3 = t2 + ramp;
 
   osc.frequency.setValueAtTime(upperFreq, now);
   osc.frequency.linearRampToValueAtTime(lowerFreq, t1);
-  osc.frequency.setValueAtTime(lowerFreq, t1);
   osc.frequency.setValueAtTime(lowerFreq, t2);
   osc.frequency.linearRampToValueAtTime(upperFreq, t3);
 
@@ -468,14 +478,29 @@ this.mode = 'powernap';
   osc.stop(t3);
 
   this.powerNapOscillator = osc;
-  this.updateStatus(`🛌 Power Nap started for ${duration}s`, 'info');
+  this.updateStatus(`🛌 Power Nap for ${duration}s`, 'info');
 }
+_handleNapRecordingStop(mime) {
+  const blob = new Blob(this.chunks, { type: mime });
+  const url  = URL.createObjectURL(blob);
+  this.downloadNapBtn.href     = url;
+  this.downloadNapBtn.download = `powernap_session.${mime.includes('mp4') ? 'mp4' : 'webm'}`;
+  this.downloadNapBtn.classList.remove('d-none');
+  this.updateStatus('✅ Power Nap recording ready', 'success');
+}
+
 stopNap() {
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-        this.mediaRecorder.stop();  // Triggers onstop
-    }
-    this.stop(); // Also stop oscillators/music
+  if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+    this.mediaRecorder.stop();  // triggers onstop above
+  }
+  if (this.powerNapOscillator) {
+    try { this.powerNapOscillator.stop(); } catch {}
+    this.powerNapOscillator.disconnect();
+    this.powerNapOscillator = null;
+  }
+  this.updateStatus('⏹️ Power Nap stopped', 'warning');
 }
+
 
     async play() {
         try {
